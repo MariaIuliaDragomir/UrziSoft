@@ -1,0 +1,93 @@
+// backend/services/productService.js
+// Serviciu pentru gestionarea produselor: citire, filtrare, căutare
+
+const fs = require('fs');
+const path = require('path');
+
+// Citim produsele o singură dată la pornirea serverului (pentru performanță)
+const productsPath = path.join(__dirname, '../data/products.json');
+let productsCache = null;
+
+/**
+ * Încarcă produsele din fișierul JSON
+ * @returns {Array} Lista de produse
+ */
+function loadProducts() {
+  if (!productsCache) {
+    const data = fs.readFileSync(productsPath, 'utf-8');
+    productsCache = JSON.parse(data);
+  }
+  return productsCache;
+}
+
+/**
+ * Caută produse pe bază de filtre
+ * @param {Object} filters - Obiect cu filtre (category, color, size, maxPrice, city, smallBusinessOnly)
+ * @returns {Array} Produse care corespund filtrelor
+ */
+function searchProducts(filters = {}) {
+  let products = loadProducts();
+  
+  // Filtrare implicită: doar small businesses
+  // (în spiritul hackathon-ului "Going Big with Small Businesses")
+  if (filters.smallBusinessOnly !== false) {
+    products = products.filter(p => p.isSmallBusiness === true);
+  }
+  
+  // Filtru: categorie (ex: "tricou", "bluza", "hanorac")
+  if (filters.category) {
+    const categoryLower = filters.category.toLowerCase();
+    products = products.filter(p => 
+      p.category.toLowerCase() === categoryLower
+    );
+  }
+  
+  // Filtru: culoare
+  if (filters.color) {
+    const colorLower = filters.color.toLowerCase();
+    products = products.filter(p => 
+      p.color.toLowerCase() === colorLower ||
+      p.color.toLowerCase().includes(colorLower) ||
+      colorLower.includes(p.color.toLowerCase())
+    );
+  }
+  
+  // Filtru: mărime disponibilă
+  if (filters.size) {
+    const sizeUpper = filters.size.toUpperCase();
+    products = products.filter(p => 
+      p.sizes && p.sizes.includes(sizeUpper)
+    );
+  }
+  
+  // Filtru: preț maxim (în bani, ex: 10000 = 100 RON)
+  if (filters.maxPrice) {
+    products = products.filter(p => p.price <= filters.maxPrice);
+  }
+  
+  // Filtru: oraș
+  if (filters.city) {
+    const cityLower = filters.city.toLowerCase();
+    products = products.filter(p => 
+      p.city && p.city.toLowerCase().includes(cityLower)
+    );
+  }
+  
+  return products;
+}
+
+/**
+ * Obține un produs specific după ID
+ * @param {string} productId 
+ * @returns {Object|null} Produsul sau null dacă nu există
+ */
+function getProductById(productId) {
+  const products = loadProducts();
+  return products.find(p => p.id === productId) || null;
+}
+
+module.exports = {
+  searchProducts,
+  getProductById,
+  loadProducts
+};

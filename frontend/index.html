@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Commerce - Small Businesses România</title>
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Stripe.js - încărcăm SDK-ul -->
+  <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+  
+  <!-- ========== HEADER ========== -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="logo-icon">🛍️</span>
+        <span class="logo-text">Agent<span class="logo-highlight">Commerce</span></span>
+      </div>
+      
+      <div class="header-actions">
+        <button class="cart-button" id="cartButton">
+          <span class="cart-icon">🛒</span>
+          <span class="cart-count" id="cartCount">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========== MAIN LAYOUT ========== -->
+  <main class="main-container">
+    
+    <!-- STÂNGA: Lista de produse -->
+    <section class="products-section" id="productsSection">
+      <div class="products-header">
+        <h2>Produse locale</h2>
+        <p class="products-subtitle">De la micii producători din România</p>
+      </div>
+      
+      <!-- Loading state -->
+      <div class="loading-state" id="loadingState">
+        <div class="spinner"></div>
+        <p>Caut produse...</p>
+      </div>
+      
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState" style="display: none;">
+        <span class="empty-icon">🔍</span>
+        <h3>Niciun produs găsit</h3>
+        <p>Încearcă să modifici filtrele sau vorbește cu agentul pentru alte sugestii!</p>
+      </div>
+      
+      <!-- Grid de produse -->
+      <div class="products-grid" id="productsGrid">
+        <!-- Produsele vor fi adăugate dinamic aici -->
+      </div>
+    </section>
+
+    <!-- DREAPTA: Chat cu AI Agent -->
+    <section class="chat-section" id="chatSection">
+      <div class="chat-header">
+        <div class="agent-avatar">🤖</div>
+        <div class="agent-info">
+          <h3>AI Shopping Agent</h3>
+          <p class="agent-status">
+            <span class="status-dot"></span>
+            Online
+          </p>
+        </div>
+      </div>
+      
+      <!-- Zona de mesaje -->
+      <div class="chat-messages" id="chatMessages">
+        <div class="message agent-message">
+          <div class="message-avatar">🤖</div>
+          <div class="message-content">
+            <p>Bună! 👋 Sunt agentul tău pentru produse locale din România.</p>
+            <p>Spune-mi ce cauți și te ajut să găsești produse de la micii producători! De exemplu: "vreau un tricou portocaliu" sau "caut o bluză verde din Cluj".</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Input pentru mesaje -->
+      <div class="chat-input-container">
+        <form class="chat-form" id="chatForm">
+          <input 
+            type="text" 
+            class="chat-input" 
+            id="chatInput" 
+            placeholder="Scrie ce cauți... (ex: tricou portocaliu M)"
+            autocomplete="off"
+          />
+          <button type="submit" class="send-button" id="sendButton">
+            <span class="send-icon">📤</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========== MODAL COȘ ========== -->
+  <div class="modal" id="cartModal">
+    <div class="modal-overlay" id="cartModalOverlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Coșul tău</h2>
+        <button class="modal-close" id="cartModalClose">✕</button>
+      </div>
+      
+      <div class="modal-body">
+        <!-- Empty cart state -->
+        <div class="cart-empty" id="cartEmpty">
+          <span class="empty-icon">🛒</span>
+          <p>Coșul tău este gol</p>
+          <p class="text-muted">Adaugă produse și vorbește cu agentul!</p>
+        </div>
+        
+        <!-- Cart items -->
+        <div class="cart-items" id="cartItems">
+          <!-- Items vor fi adăugate dinamic -->
+        </div>
+        
+        <!-- Cart summary -->
+        <div class="cart-summary" id="cartSummary" style="display: none;">
+          <div class="summary-row">
+            <span>Subtotal:</span>
+            <span id="cartSubtotal">0.00 RON</span>
+          </div>
+          <div class="summary-row total">
+            <span>Total:</span>
+            <span id="cartTotal">0.00 RON</span>
+          </div>
+          
+          <button class="checkout-button" id="checkoutButton">
+            <span>Plătește cu Stripe</span>
+            <span class="stripe-badge">🔒</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAL DETALII PRODUS ========== -->
+  <div class="modal" id="productModal">
+    <div class="modal-overlay" id="productModalOverlay"></div>
+    <div class="modal-content modal-product">
+      <button class="modal-close" id="productModalClose">✕</button>
+      <div class="modal-body" id="productModalBody">
+        <!-- Detalii produs vor fi adăugate dinamic -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SCRIPTS ========== -->
+  <!-- Modulele noastre JavaScript (ES6 modules) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
