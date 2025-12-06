@@ -1,133 +1,196 @@
 // backend/services/agentService.js
-// Logica AI Agent: înțelegere intenții, generare întrebări, actualizare filtre
+// AI Agent cu Google Gemini + Function Calling pentru Agentic Commerce
+
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+// Inițializare Gemini
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 /**
- * Procesează mesajul utilizatorului și generează răspuns + filtre
- * Aceasta e o implementare simplificată pentru hackathon.
- * În producție, aici ai integra un LLM real (Claude, GPT, etc.)
+ * Tool (Function) pentru căutarea de produse
+ * Agentul va folosi acest tool automat când utilizatorul cere produse
+ */
+const searchProductsTool = {
+  name: 'search_products',
+  description: 'Caută produse de la small businesses locale din România. Folosește acest tool când utilizatorul cere un anumit tip de produs.',
+  parameters: {
+    type: 'object',
+    properties: {
+      category: {
+        type: 'string',
+        description: 'Categoria de produs (ex: tricou, bluza, hanorac)',
+        enum: ['tricou', 'bluza', 'hanorac']
+      },
+      color: {
+        type: 'string',
+        description: 'Culoarea produsului (ex: portocaliu, albastru, verde, rosu, negru, alb, gri)'
+      },
+      size: {
+        type: 'string',
+        description: 'Mărimea dorită',
+        enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL']
+      },
+      maxPrice: {
+        type: 'number',
+        description: 'Prețul maxim în RON (va fi convertit în bani automat)'
+      },
+      city: {
+        type: 'string',
+        description: 'Orașul de unde utilizatorul vrea produse (ex: Cluj, București, Brașov, Timișoara, Sibiu)'
+      }
+    },
+    required: ['category']
+  }
+};
+
+/**
+ * System prompt pentru agent - definește comportamentul
+ */
+const SYSTEM_PROMPT = `Ești un AI Shopping Agent pentru small businesses din România. Rolul tău este să ajuți utilizatorii să găsească produse locale de calitate.
+
+REGULI IMPORTANTE:
+1. Ești prietenos, conversațional și entuziast despre produsele locale
+2. Când utilizatorul cere un produs, ÎNTOTDEAUNA folosește tool-ul search_products pentru a căuta
+3. Pune întrebări de clarificare DOAR dacă lipsesc informații esențiale
+4. Filtrezi IMPLICIT doar small businesses locale din România
+5. Ești scurt și la obiect - nu scrii paragrafe lungi
+6. Folosești emoji-uri dar nu exagera
+7. Când ai rezultate, anunță utilizatorul că produsele apar în stânga
+
+EXEMPLE DE COMPORTAMENT BUN:
+User: "Vreau un tricou portocaliu"
+Agent: [FOLOSEȘTE tool search_products cu category=tricou, color=portocaliu]
+       "Perfect! Am găsit tricouri portocalii de la producători locali. Vezi produsele în stânga! 🎨"
+
+User: "Caut ceva din Cluj"
+Agent: "Ce anume cauți din Cluj? Tricouri, bluze sau hanorace? 🤔"
+
+User: "Mărime M maxim 80 lei"
+Agent: [FOLOSEȘTE tool search_products cu ultimele filtre + size=M, maxPrice=80]
+       "Am actualizat căutarea! Vezi produsele care se potrivesc bugetului și mărimii tale. 👕"
+
+COMPORTAMENT GREȘIT (NU FACE AȘA):
+- Nu genera liste lungi de produse în chat
+- Nu repeta aceleași întrebări
+- Nu scrie paragrafe lungi
+- Nu inventa produse care nu există
+
+Începe conversația friendly și ajută utilizatorul să găsească exact ce caută!`;
+
+/**
+ * Procesează mesajul utilizatorului folosind Gemini cu function calling
  * 
  * @param {string} message - Mesajul utilizatorului
- * @param {Object} state - Starea conversației (filtre anterioare, context)
- * @returns {Object} { reply, filters, newState }
+ * @param {Object} state - Starea conversației
+ * @returns {Promise<Object>} { reply, filters, newState }
  */
-function processMessage(message, state = {}) {
-  const messageLower = message.toLowerCase();
-  
-  // Inițializăm starea dacă e prima interacțiune
-  if (!state.filters) {
-    state.filters = { smallBusinessOnly: true };
-  }
-  if (!state.conversationStep) {
-    state.conversationStep = 'initial';
-  }
-  
-  let reply = '';
-  let filters = { ...state.filters };
-  let newState = { ...state };
-  
-  // ========== DETECTARE INTENȚIE INIȚIALĂ ==========
-  
-  // Detectăm categoria de produs
-  if (messageLower.includes('tricou')) {
-    filters.category = 'tricou';
-    newState.conversationStep = 'asked_category';
-  } else if (messageLower.includes('bluza') || messageLower.includes('bluză')) {
-    filters.category = 'bluza';
-    newState.conversationStep = 'asked_category';
-  } else if (messageLower.includes('hanorac')) {
-    filters.category = 'hanorac';
-    newState.conversationStep = 'asked_category';
-  }
-  
-  // Detectăm culoarea
-  const colors = ['portocaliu', 'albastru', 'verde', 'rosu', 'roșu', 'negru', 'alb', 'gri'];
-  for (const color of colors) {
-    if (messageLower.includes(color)) {
-      filters.color = color.replace('ș', 's'); // normalizare
-      newState.hasColor = true;
-      break;
+async function processMessage(message, state = {}) {
+  try {
+    // Inițializăm starea
+    if (!state.conversationHistory) {
+      state.conversationHistory = [];
     }
-  }
-  
-  // Detectăm mărimea
-  const sizes = ['xs', 's', 'm', 'l', 'xl', 'xxl'];
-  for (const size of sizes) {
-    if (messageLower.includes(size) || messageLower.includes(size.toUpperCase())) {
-      filters.size = size.toUpperCase();
-      newState.hasSize = true;
-      break;
+    if (!state.filters) {
+      state.filters = { smallBusinessOnly: true };
     }
-  }
-  
-  // Detectăm orașul
-  const cities = ['cluj', 'bucurești', 'brasov', 'brașov', 'timisoara', 'timișoara', 'sibiu'];
-  for (const city of cities) {
-    if (messageLower.includes(city)) {
-      filters.city = city;
-      newState.hasCity = true;
-      break;
-    }
-  }
-  
-  // Detectăm bugetul (ex: "maxim 100 lei", "sub 80 ron")
-  const budgetMatch = messageLower.match(/(\d+)\s*(lei|ron)/);
-  if (budgetMatch) {
-    filters.maxPrice = parseInt(budgetMatch[1]) * 100; // convertim în bani
-    newState.hasBudget = true;
-  }
-  
-  // ========== GENERARE RĂSPUNS CONVERSAȚIONAL ==========
-  
-  if (newState.conversationStep === 'asked_category' && !newState.hasAskedDetails) {
-    // Prima interacțiune: am detectat categoria, întrebăm detalii
-    reply = `Super! Caut ${filters.category || 'produse'} de la producători locali. `;
+
+    // Configurăm modelul cu tool calling
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      tools: [{
+        functionDeclarations: [searchProductsTool]
+      }]
+    });
+
+    // Construim istoricul conversației pentru context
+    const history = state.conversationHistory.map(msg => ({
+      role: msg.role,
+      parts: [{ text: msg.content }]
+    }));
+
+    // Pornim chat session cu istoric
+    const chat = model.startChat({
+      history,
+      systemInstruction: SYSTEM_PROMPT
+    });
+
+    // Trimitem mesajul utilizatorului
+    const result = await chat.sendMessage(message);
+    const response = result.response;
+
+    let reply = '';
+    let filters = { ...state.filters };
+    let toolCalled = false;
+
+    // Verificăm dacă agentul vrea să folosească tool-ul
+    const functionCalls = response.functionCalls();
     
-    const questions = [];
-    if (!newState.hasColor) questions.push('Ce culoare preferi?');
-    if (!newState.hasSize) questions.push('Ce mărime porți? (S, M, L, XL)');
-    if (!newState.hasBudget) questions.push('Ai un buget maxim în minte?');
-    if (!newState.hasCity) questions.push('Vrei produse dintr-un oraș anume?');
-    
-    if (questions.length > 0) {
-      reply += questions.join(' ');
-      newState.hasAskedDetails = true;
+    if (functionCalls && functionCalls.length > 0) {
+      // Agentul a decis să caute produse!
+      const functionCall = functionCalls[0];
+      
+      if (functionCall.name === 'search_products') {
+        toolCalled = true;
+        const args = functionCall.args;
+        
+        // Actualizăm filtrele din argumentele tool-ului
+        if (args.category) filters.category = args.category;
+        if (args.color) filters.color = args.color;
+        if (args.size) filters.size = args.size;
+        if (args.maxPrice) filters.maxPrice = args.maxPrice * 100; // convertim în bani
+        if (args.city) filters.city = args.city;
+
+        // Simulăm răspunsul de la tool (în realitate, produsele sunt căutate de frontend)
+        const toolResponse = {
+          success: true,
+          message: `Am găsit produse care corespund: ${JSON.stringify(args)}`
+        };
+
+        // Trimitem răspunsul tool-ului înapoi la agent
+        const result2 = await chat.sendMessage([{
+          functionResponse: {
+            name: 'search_products',
+            response: toolResponse
+          }
+        }]);
+
+        reply = result2.response.text();
+      }
     } else {
-      reply = 'Perfect! Uite ce am găsit pentru tine: 👇';
-      newState.conversationStep = 'showing_results';
+      // Agentul răspunde direct (conversație normală)
+      reply = response.text();
     }
+
+    // Actualizăm istoricul conversației
+    const newHistory = [
+      ...state.conversationHistory,
+      { role: 'user', content: message },
+      { role: 'model', content: reply }
+    ];
+
+    // Păstrăm doar ultimele 10 mesaje pentru a nu depăși limita de context
+    const trimmedHistory = newHistory.slice(-10);
+
+    return {
+      reply: reply.trim(),
+      filters: toolCalled ? filters : state.filters,
+      newState: {
+        ...state,
+        conversationHistory: trimmedHistory,
+        filters: toolCalled ? filters : state.filters
+      }
+    };
+
+  } catch (error) {
+    console.error('Eroare Gemini API:', error);
     
-  } else if (newState.hasAskedDetails) {
-    // Utilizatorul răspunde la întrebări
-    const stillMissing = [];
-    if (!newState.hasColor && !filters.color) stillMissing.push('culoarea');
-    if (!newState.hasSize && !filters.size) stillMissing.push('mărimea');
-    
-    if (stillMissing.length === 0) {
-      reply = 'Perfect! Am actualizat căutarea. Vezi produsele în stânga! 🎯';
-      newState.conversationStep = 'showing_results';
-    } else {
-      reply = `Am înregistrat! ${stillMissing.length > 0 ? 'Mai am nevoie de: ' + stillMissing.join(', ') : 'Gata!'}`;
-    }
-    
-  } else if (messageLower.includes('salut') || messageLower.includes('bună') || messageLower.includes('hey')) {
-    // Mesaj de salut
-    reply = 'Bună! 👋 Sunt agentul tău de cumpărături pentru produse locale. Spune-mi ce cauți și te ajut să găsești produse de la micii producători din România!';
-    newState.conversationStep = 'greeted';
-    
-  } else if (newState.conversationStep === 'showing_results') {
-    // Utilizatorul vrea să modifice căutarea
-    reply = 'Am actualizat filtrele! Vezi produsele noi în listă. 🔄';
-    
-  } else {
-    // Fallback: nu am înțeles mesajul
-    reply = 'Pot să te ajut să găsești tricouri, bluze sau hanorace de la producători locali. Ce te interesează?';
+    // Fallback la un răspuns generic dacă API-ul eșuează
+    return {
+      reply: 'Îmi pare rău, am avut o problemă tehnică. Te rog încearcă din nou! 😊',
+      filters: state.filters || { smallBusinessOnly: true },
+      newState: state
+    };
   }
-  
-  return {
-    reply,
-    filters,
-    newState
-  };
 }
 
 module.exports = {
