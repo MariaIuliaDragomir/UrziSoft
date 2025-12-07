@@ -3,19 +3,38 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  calculateSmallBusinessScore,
+  getBusinessCategory,
+  isSmallBusiness,
+} = require("./businessSizeClassifier");
 
 // Citim produsele o singură dată la pornirea serverului (pentru performanță)
 const productsPath = path.join(__dirname, "../data/products.json");
 let productsCache = null;
 
 /**
- * Încarcă produsele din fișierul JSON
- * @returns {Array} Lista de produse
+ * Încarcă produsele din fișierul JSON și calculează scorul small business
+ * @returns {Array} Lista de produse cu scor calculat
  */
 function loadProducts() {
   if (!productsCache) {
     const data = fs.readFileSync(productsPath, "utf-8");
-    productsCache = JSON.parse(data);
+    const products = JSON.parse(data);
+
+    // Calculăm scorul pentru fiecare produs
+    productsCache = products.map((product) => {
+      const score = calculateSmallBusinessScore(product.vendorId);
+      const category = getBusinessCategory(score);
+      const isSmall = isSmallBusiness(product.vendorId);
+
+      return {
+        ...product,
+        smallBusinessScore: score,
+        businessCategory: category,
+        isSmallBusiness: isSmall,
+      };
+    });
   }
   return productsCache;
 }
@@ -42,10 +61,12 @@ function searchProducts(filters = {}) {
     );
   }
 
-  // Filtru: culoare (potrivire exactă)
+  // Filtru: culoare (potrivire parțială pentru a prinde și 'verde închis' când caută 'verde')
   if (filters.color) {
     const colorLower = filters.color.toLowerCase();
-    products = products.filter((p) => p.color.toLowerCase() === colorLower);
+    products = products.filter(
+      (p) => p.color && p.color.toLowerCase().includes(colorLower)
+    );
   }
 
   // Filtru: mărime disponibilă
@@ -66,6 +87,14 @@ function searchProducts(filters = {}) {
       (p) => p.city && p.city.toLowerCase().includes(cityLower)
     );
   }
+
+  // SORTARE: Produse de la firme mici la firme mari (scor descrescător)
+  // Scor 100 = cel mai mic business → apare primul
+  // Scor 0 = cel mai mare business → apare ultimul
+  products.sort((a, b) => {
+    // Sortăm descrescător după smallBusinessScore
+    return (b.smallBusinessScore || 0) - (a.smallBusinessScore || 0);
+  });
 
   return products;
 }

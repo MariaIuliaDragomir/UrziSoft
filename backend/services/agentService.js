@@ -28,23 +28,84 @@ function processMessage(message, state = {}) {
   // ========== DETECTARE INTENȚIE INIȚIALĂ ==========
 
   // Detectăm categoria de produs
-  if (messageLower.includes("tricou")) {
-    filters.category = "tricou";
-    newState.conversationStep = "asked_category";
-  } else if (messageLower.includes("bluza") || messageLower.includes("bluză")) {
-    filters.category = "bluza";
-    newState.conversationStep = "asked_category";
-  } else if (messageLower.includes("hanorac")) {
-    filters.category = "hanorac";
-    newState.conversationStep = "asked_category";
-  }
-   else if (messageLower.includes("ghete")) {
-    filters.category = "ghete";
-    newState.conversationStep = "asked_category";
-  }
-   else if (messageLower.includes("jacheta")) {
-    filters.category = "jacheta";
-    newState.conversationStep = "asked_category";
+  const categoryMap = {
+    tricou: ["tricou", "tricouri"],
+    bluza: ["bluza", "bluză", "bluze"],
+    hanorac: ["hanorac", "hanorace"],
+    pulover: ["pulover", "pulovere"],
+    cardigan: ["cardigan"],
+    incaltaminte: [
+      "ghete",
+      "ghetă",
+      "încălțăminte",
+      "incaltaminte",
+      "adidași",
+      "adidasi",
+      "pantofi",
+    ],
+    jacheta: ["jacheta", "jachetă", "geci", "geaca", "geacă"],
+    pantaloni: ["pantaloni", "pantalon"],
+    trening: ["trening", "treninguri"],
+    rochie: ["rochie", "rochii"],
+    fusta: ["fustă", "fusta", "fuste"],
+    sapca: ["șapcă", "sapca", "șepci", "șapcă"],
+    bijuterii: [
+      "bijuterii",
+      "bijuterie",
+      "inel",
+      "inele",
+      "brățară",
+      "bratara",
+      "bratari",
+      "colier",
+      "coliere",
+      "cercei",
+    ],
+    geanta: ["geantă", "geanta", "genti"],
+    rucsac: ["rucsac", "rucsacuri", "ghiozdan"],
+    ceas: ["ceas", "ceasuri"],
+    ochelari: ["ochelari", "ochelari de soare"],
+    decor: [
+      "decorațiuni",
+      "decoratiuni",
+      "decor",
+      "vază",
+      "vaza",
+      "vaze",
+      "tablou",
+      "tablouri",
+    ],
+    iluminat: ["lampa", "lampă", "iluminat", "veioza", "lumini"],
+    lumanari: ["lumanare", "lumânare", "lumanari", "lumânări", "lumânare"],
+    aromaterapie: ["aromaterapie", "difuzor", "uleiuri"],
+    perna: ["pernă", "perna", "perne"],
+    termos: ["termos", "termosuri"],
+    sticla: ["sticlă", "sticla", "sticle", "bidon"],
+    papetarie: [
+      "papetarie",
+      "papetărie",
+      "notebook",
+      "caiet",
+      "jurnal",
+      "agenda",
+      "agendă",
+    ],
+    cosmetice: ["cosmetice", "cosmetică", "crema", "cremă", "balsam"],
+    audio: ["casca", "cască", "casti", "căști", "audio", "boxa", "boxă"],
+    accesorii_pc: ["mouse", "tastatura", "tastatură", "accesorii pc"],
+    accesorii_telefon: ["husa", "husă", "telefon", "accesorii telefon"],
+    bucatarie: ["bucătărie", "bucatarie", "ustensile"],
+    sport: ["sport", "fitness", "yoga"],
+    electrocasnice: ["electrocasnice"],
+  };
+
+  // Căutăm categoria
+  for (const [category, keywords] of Object.entries(categoryMap)) {
+    if (keywords.some((keyword) => messageLower.includes(keyword))) {
+      filters.category = category;
+      newState.conversationStep = "asked_category";
+      break;
+    }
   }
 
   // Detectăm culoarea
@@ -130,11 +191,23 @@ function processMessage(message, state = {}) {
     }
   }
 
-  // Detectăm bugetul (ex: "maxim 100 lei", "sub 80 ron")
+  // Detectăm bugetul (ex: "maxim 100 lei", "sub 80 ron", "100 lei", "buget 50 ron")
   const budgetMatch = messageLower.match(/(\d+)\s*(lei|ron)/);
   if (budgetMatch) {
     filters.maxPrice = parseInt(budgetMatch[1]) * 100; // convertim în bani
     newState.hasBudget = true;
+  }
+
+  // Detectăm și numere simple care pot reprezenta bugetul
+  if (
+    !newState.hasBudget &&
+    messageLower.match(/buget|maxim|pana la|până la/)
+  ) {
+    const numberMatch = messageLower.match(/(\d+)/);
+    if (numberMatch) {
+      filters.maxPrice = parseInt(numberMatch[1]) * 100;
+      newState.hasBudget = true;
+    }
   }
 
   // ========== GENERARE RĂSPUNS CONVERSAȚIONAL ==========
@@ -144,55 +217,95 @@ function processMessage(message, state = {}) {
     !newState.hasAskedDetails
   ) {
     // Prima interacțiune: am detectat categoria, întrebăm detalii
-    reply = `Super! Caut ${
-      filters.category || "produse"
-    } de la producători locali. `;
+    const categoryName = filters.category || "produse";
+    reply = `Bună! Caut ${categoryName} de la producători locali. `;
 
     const questions = [];
-    if (!newState.hasColor) questions.push("Ce culoare preferi?");
-    if (!newState.hasSize) questions.push("Ce mărime porți? (S, M, L, XL)");
-    if (!newState.hasBudget) questions.push("Ai un buget maxim în minte?");
-    if (!newState.hasCity) questions.push("Vrei produse dintr-un oraș anume?");
+
+    // Întrebăm doar despre culoare dacă categoria suportă culori
+    const colorCategories = [
+      "tricou",
+      "bluza",
+      "hanorac",
+      "pulover",
+      "geaca",
+      "pantaloni",
+      "trening",
+      "rochie",
+      "fusta",
+      "sapca",
+      "rucsac",
+      "geanta",
+    ];
+    if (!newState.hasColor && colorCategories.includes(filters.category)) {
+      questions.push("Ce culoare preferi?");
+    }
+
+    // Întrebăm despre mărime doar pentru haine și încălțăminte
+    const sizeCategories = [
+      "tricou",
+      "bluza",
+      "hanorac",
+      "pulover",
+      "cardigan",
+      "jacheta",
+      "pantaloni",
+      "trening",
+      "rochie",
+      "fusta",
+      "incaltaminte",
+      "sapca",
+    ];
+    if (!newState.hasSize && sizeCategories.includes(filters.category)) {
+      questions.push("Ce mărime? (S, M, L, XL)");
+    }
+
+    if (!newState.hasBudget) questions.push("Care e bugetul tău?");
+    if (!newState.hasCity) questions.push("Preferi din vreun oraș anume?");
 
     if (questions.length > 0) {
       reply += questions.join(" ");
       newState.hasAskedDetails = true;
     } else {
-      reply = "Perfect! Uite ce am găsit pentru tine: 👇";
+      reply = "Caut produsele potrivite...";
       newState.conversationStep = "showing_results";
     }
   } else if (newState.hasAskedDetails) {
     // Utilizatorul răspunde la întrebări
-    const stillMissing = [];
-    if (!newState.hasColor && !filters.color) stillMissing.push("culoarea");
-    if (!newState.hasSize && !filters.size) stillMissing.push("mărimea");
+    const updates = [];
+    if (filters.color && !state.filters.color)
+      updates.push(`culoare ${filters.color}`);
+    if (filters.size && !state.filters.size)
+      updates.push(`mărime ${filters.size}`);
+    if (filters.maxPrice && !state.filters.maxPrice)
+      updates.push(`buget până în ${filters.maxPrice / 100} RON`);
+    if (filters.city && !state.filters.city)
+      updates.push(`din ${filters.city}`);
 
-    if (stillMissing.length === 0) {
-      reply = "Perfect! Am actualizat căutarea. Vezi produsele în stânga! 🎯";
+    if (updates.length > 0) {
+      reply = `Am actualizat: ${updates.join(", ")}. Verific stocul...`;
       newState.conversationStep = "showing_results";
     } else {
-      reply = `Am înregistrat! ${
-        stillMissing.length > 0
-          ? "Mai am nevoie de: " + stillMissing.join(", ")
-          : "Gata!"
-      }`;
+      reply = "Caut în catalog...";
+      newState.conversationStep = "showing_results";
     }
   } else if (
     messageLower.includes("salut") ||
     messageLower.includes("bună") ||
-    messageLower.includes("hey")
+    messageLower.includes("hey") ||
+    messageLower.includes("hello")
   ) {
     // Mesaj de salut
     reply =
-      "Bună! 👋 Sunt agentul tău de cumpărături pentru produse locale. Spune-mi ce cauți și te ajut să găsești produse de la micii producători din România!";
+      "Bună! 👋 Îți caut produse de la micii producători din România. Ce anume cauți?";
     newState.conversationStep = "greeted";
   } else if (newState.conversationStep === "showing_results") {
     // Utilizatorul vrea să modifice căutarea
-    reply = "Am actualizat filtrele! Vezi produsele noi în listă. 🔄";
+    reply = "Actualizez căutarea...";
   } else {
     // Fallback: nu am înțeles mesajul
     reply =
-      "Pot să te ajut să găsești tricouri, bluze sau hanorace de la producători locali. Ce te interesează?";
+      "Îți pot găsi diverse produse de la producători locali. Încearcă să-mi spui ce cauți! (ex: hanorac verde, jurnal, lumânări, etc.)";
   }
 
   return {
