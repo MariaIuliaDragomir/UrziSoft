@@ -38,6 +38,14 @@ function processMessage(message, state = {}) {
     filters.category = "hanorac";
     newState.conversationStep = "asked_category";
   }
+   else if (messageLower.includes("ghete")) {
+    filters.category = "ghete";
+    newState.conversationStep = "asked_category";
+  }
+   else if (messageLower.includes("jacheta")) {
+    filters.category = "jacheta";
+    newState.conversationStep = "asked_category";
+  }
 
   // Detectăm culoarea
   const colors = [
@@ -49,6 +57,13 @@ function processMessage(message, state = {}) {
     "negru",
     "alb",
     "gri",
+    "galben",
+    "mov",
+    "roz",
+    "maro",
+    "bej",
+    "turcoaz",
+    "bleu",
   ];
   for (const color of colors) {
     if (messageLower.includes(color)) {
@@ -80,6 +95,32 @@ function processMessage(message, state = {}) {
     "timisoara",
     "timișoara",
     "sibiu",
+    "iasi",
+    "iași",
+    "constanta",
+    "constanța",
+    "oradea",
+    "galati",
+    "galați",
+    "pitesti",
+    "pitești",
+    "baia mare",
+    "baiamare",
+    "satu mare",
+    "satumare",
+    "arad",
+    "ploiesti",
+    "ploiesti",
+    "drobeta",
+    "drobeta turnu severin",
+    "turnu severin",
+    "suceava",
+    "botosani",
+    "botoșani",
+    "targu mures",
+    "târgu mureș",
+    "targu jiu",
+    "târgu jiu",
   ];
   for (const city of cities) {
     if (messageLower.includes(city)) {

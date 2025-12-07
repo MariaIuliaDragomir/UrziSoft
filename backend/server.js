@@ -66,12 +66,12 @@ app.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════════════════╗
   ║                                                      ║
-  ║   🚀 Stripe Agent Commerce Server                   ║
+  ║   🚀 Stripe Agent Commerce Server                    ║
   ║                                                      ║
-  ║   Server: http://localhost:${PORT}                      ║
-  ║   API:    http://localhost:${PORT}/api                  ║
+  ║   Server: http://localhost:${PORT}                   ║
+  ║   API:    http://localhost:${PORT}/api               ║
   ║                                                      ║
-  ║   Ready for hackathon! 💪                           ║
+  ║                                                      ║
   ║                                                      ║
   ╚══════════════════════════════════════════════════════╝
   `);
