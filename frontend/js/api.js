@@ -87,6 +87,76 @@ export async function sendMessageToAgent(message, state = {}) {
 }
 
 /**
+ * Cere feedback de la agent după afișarea rezultatelor
+ * @param {number} resultsCount - Numărul de produse găsite
+ * @param {Object} state - Starea conversației
+ * @returns {Promise<Object>} Mesaj de feedback + stare nouă
+ */
+export async function requestFeedback(resultsCount, state = {}) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/agent/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        resultsCount,
+        filters: state.filters || {},
+        state,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || "Eroare la generarea feedback-ului");
+    }
+
+    return {
+      feedbackMessage: data.feedbackMessage,
+      options: data.options || [],
+      newState: data.newState,
+    };
+  } catch (error) {
+    console.error("Eroare requestFeedback:", error);
+    throw error;
+  }
+}
+
+/**
+ * Trimite răspunsul utilizatorului la feedback
+ * @param {string} feedbackResponse - Răspunsul utilizatorului (satisfied/show_more/etc)
+ * @param {Object} state - Starea conversației
+ * @returns {Promise<Object>} Reply, action și stare nouă
+ */
+export async function sendFeedbackResponse(feedbackResponse, state = {}) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/agent/feedback-response`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ feedbackResponse, state }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || "Eroare la procesarea feedback-ului");
+    }
+
+    return {
+      reply: data.reply,
+      action: data.action,
+      newState: data.newState,
+    };
+  } catch (error) {
+    console.error("Eroare sendFeedbackResponse:", error);
+    throw error;
+  }
+}
+
+/**
  * Creează o sesiune Stripe Checkout
  * @param {Array} items - Lista de produse din coș
  * @returns {Promise<string>} Session ID pentru Stripe

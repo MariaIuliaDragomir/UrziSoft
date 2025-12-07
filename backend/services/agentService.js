@@ -125,6 +125,19 @@ function processMessage(message, state = {}) {
     "bej",
     "turcoaz",
     "bleu",
+    "mustar",
+    "lila",
+    "indigo",
+    "corai",
+    "oliv",
+    "carmeniu",
+    "safir",
+    "smarald",
+    "burgundy",
+    "cyan",
+    "magenta",
+    "lavanda",
+    "crem",
   ];
   for (const color of colors) {
     if (messageLower.includes(color)) {
@@ -134,13 +147,12 @@ function processMessage(message, state = {}) {
     }
   }
 
-  // Detectăm mărimea
+  // Detectăm mărimea (cu word boundaries pentru a evita false positives)
   const sizes = ["xs", "s", "m", "l", "xl", "xxl"];
   for (const size of sizes) {
-    if (
-      messageLower.includes(size) ||
-      messageLower.includes(size.toUpperCase())
-    ) {
+    // Folosim regex cu word boundary pentru a evita detecții false (ex: "l" în "lei")
+    const sizeRegex = new RegExp(`\\b${size}\\b`, "i");
+    if (sizeRegex.test(messageLower)) {
       filters.size = size.toUpperCase();
       newState.hasSize = true;
       break;
@@ -182,6 +194,31 @@ function processMessage(message, state = {}) {
     "târgu mureș",
     "targu jiu",
     "târgu jiu",
+    "ramnicu valcea",
+    "râmnicu vâlcea",
+    "calarasi",
+    "călărași",
+    "alba iulia",
+    "alba",
+    "iulua",
+    "pascani",
+    "pașcani",
+    "turda",
+    "medias",
+    "mediaș",
+    "cisnadie",
+    "cîșnădie",
+    "fagaras",
+    "făgăraș",
+    "curtea de arges",
+    "curtea de argeș",
+    "argeș",
+    "tulcea",
+    "reghin",
+    "mangalia",
+    "slatina",
+    "calafat",
+    "tecuci",
   ];
   for (const city of cities) {
     if (messageLower.includes(city)) {
@@ -191,22 +228,39 @@ function processMessage(message, state = {}) {
     }
   }
 
-  // Detectăm bugetul (ex: "maxim 100 lei", "sub 80 ron", "100 lei", "buget 50 ron")
-  const budgetMatch = messageLower.match(/(\d+)\s*(lei|ron)/);
-  if (budgetMatch) {
-    filters.maxPrice = parseInt(budgetMatch[1]) * 100; // convertim în bani
+  // Detectăm bugetul (ex: "maxim 100 lei", "sub 80 ron", "100 lei", "buget 50 ron", "până în 200")
+  // Încercăm mai multe variante de pattern-uri
+  let budgetMatch = messageLower.match(/(\d+)\s*(lei|ron)/i);
+
+  if (!budgetMatch) {
+    // Încercăm pattern-uri cu "până la/în", "maxim", "sub", "buget"
+    budgetMatch = messageLower.match(
+      /(până\s+(la|în|in)|pana\s+(la|în|in)|maxim|sub|buget)\s*(\d+)/i
+    );
+    if (budgetMatch) {
+      const price = parseInt(budgetMatch[4]);
+      filters.maxPrice = price * 100; // convertim în bani
+      newState.hasBudget = true;
+    }
+  } else {
+    // Am găsit format cu "lei" sau "ron"
+    const price = parseInt(budgetMatch[1]);
+    filters.maxPrice = price * 100; // convertim în bani
     newState.hasBudget = true;
   }
 
-  // Detectăm și numere simple care pot reprezenta bugetul
-  if (
-    !newState.hasBudget &&
-    messageLower.match(/buget|maxim|pana la|până la/)
-  ) {
-    const numberMatch = messageLower.match(/(\d+)/);
-    if (numberMatch) {
-      filters.maxPrice = parseInt(numberMatch[1]) * 100;
-      newState.hasBudget = true;
+  // Ultimă încercare: doar un număr urmat de context de buget
+  if (!newState.hasBudget) {
+    const contextMatch = messageLower.match(
+      /(buget|maxim|pana|până).{0,10}(\d+)|(\d+).{0,10}(lei|ron|buget)/i
+    );
+    if (contextMatch) {
+      const price = parseInt(contextMatch[2] || contextMatch[3]);
+      if (price && price > 10 && price < 10000) {
+        // sanity check: între 10 și 10000 RON
+        filters.maxPrice = price * 100;
+        newState.hasBudget = true;
+      }
     }
   }
 
@@ -236,6 +290,9 @@ function processMessage(message, state = {}) {
       "sapca",
       "rucsac",
       "geanta",
+      "incaltaminte",
+      "lumanari",
+      "cosmetice",
     ];
     if (!newState.hasColor && colorCategories.includes(filters.category)) {
       questions.push("Ce culoare preferi?");
@@ -255,6 +312,10 @@ function processMessage(message, state = {}) {
       "fusta",
       "incaltaminte",
       "sapca",
+      "rucsac",
+      "geanta",
+      "lumanari",
+      "cosmetice",
     ];
     if (!newState.hasSize && sizeCategories.includes(filters.category)) {
       questions.push("Ce mărime? (S, M, L, XL)");
@@ -315,6 +376,174 @@ function processMessage(message, state = {}) {
   };
 }
 
+/**
+ * Generează mesaj de feedback după afișarea rezultatelor
+ * @param {number} resultsCount - Numărul de rezultate găsite
+ * @param {Object} filters - Filtrele curente aplicate
+ * @param {Object} state - Starea conversației
+ * @returns {Object} { feedbackMessage, options, newState }
+ */
+function generateFeedback(resultsCount, filters = {}, state = {}) {
+  let feedbackMessage = "";
+  let options = [];
+  let newState = { ...state, awaitingFeedback: true };
+
+  // Construim context despre filtrele active
+  const activeFilters = [];
+  if (filters.category) activeFilters.push(filters.category);
+  if (filters.color) activeFilters.push(`culoare ${filters.color}`);
+  if (filters.maxPrice) activeFilters.push(`sub ${filters.maxPrice / 100} lei`);
+  if (filters.city) activeFilters.push(`din ${filters.city}`);
+
+  const filterContext =
+    activeFilters.length > 0 ? ` pentru ${activeFilters.join(", ")}` : "";
+
+  if (resultsCount === 0) {
+    feedbackMessage = `Hmm, nu am găsit nimic${filterContext}. 😕 Hai să încercăm altfel!`;
+    options = [
+      { text: "🔍 Relaxează filtrele", value: "show_more" },
+      { text: "🔄 Caută altceva", value: "search_new" },
+    ];
+  } else if (resultsCount === 1) {
+    feedbackMessage = `Am găsit un produs${filterContext}. Pare ceea ce căutai? 🤔`;
+    options = [
+      { text: "✅ Da, perfect!", value: "satisfied" },
+      { text: "👀 Vreau mai multe opțiuni", value: "show_more" },
+      { text: "🔄 Caută altceva", value: "search_new" },
+    ];
+  } else if (resultsCount < 5) {
+    feedbackMessage = `Am găsit ${resultsCount} produse${filterContext}. Ai găsit ceva interesant? 😊`;
+    options = [
+      { text: "✅ Da, mulțumesc!", value: "satisfied" },
+      { text: "👀 Mai multe opțiuni", value: "show_more" },
+      { text: "🔄 Caută altceva", value: "search_new" },
+    ];
+  } else if (resultsCount <= 10) {
+    feedbackMessage = `Super! Am găsit ${resultsCount} produse${filterContext}. Vrei să restrâng căutarea? 🎯`;
+    options = [
+      { text: "✅ Am găsit ce căutam", value: "satisfied" },
+      { text: "🎯 Filtrează mai mult", value: "refine" },
+    ];
+  } else {
+    feedbackMessage = `Wow! Am găsit ${resultsCount} produse${filterContext}! 🎉 Te ajut să găsești mai ușor?`;
+    options = [
+      { text: "✅ E perfect așa", value: "satisfied" },
+      { text: "🎯 Ajută-mă să filtrezi", value: "refine" },
+    ];
+  }
+
+  return {
+    feedbackMessage,
+    options,
+    newState,
+  };
+}
+
+/**
+ * Procesează răspunsul la feedback
+ * @param {string} feedbackResponse - Răspunsul utilizatorului (satisfied/show_more/refine/etc)
+ * @param {Object} state - Starea curentă
+ * @returns {Object} { reply, action, newState }
+ */
+function processFeedbackResponse(feedbackResponse, state = {}) {
+  let reply = "";
+  let action = null;
+  let newState = { ...state, awaitingFeedback: false };
+
+  switch (feedbackResponse) {
+    case "satisfied":
+      reply =
+        "Super! 🎉 Mă bucur că te-am putut ajuta să găsești produse de la micii producători locali. Dacă mai ai nevoie de ceva, sunt aici!";
+      action = "close_conversation";
+      newState.conversationStep = "completed";
+      break;
+
+    case "show_more":
+      reply =
+        "Înțeles! Relaxez filtrele pentru a-ți arăta mai multe opțiuni... 🔍";
+      action = "remove_filters";
+      // Eliminăm filtre în ordine de importanță
+      if (state.filters) {
+        const newFilters = { ...state.filters };
+        const removedFilters = [];
+
+        // Eliminăm filtrul de culoare mai întâi (cel mai restrictiv)
+        if (newFilters.color) {
+          removedFilters.push(`culoare ${newFilters.color}`);
+          delete newFilters.color;
+        }
+        // Apoi mărimea
+        else if (newFilters.size) {
+          removedFilters.push(`mărimea ${newFilters.size}`);
+          delete newFilters.size;
+        }
+        // Apoi bugetul
+        else if (newFilters.maxPrice) {
+          removedFilters.push(`limita de preț`);
+          delete newFilters.maxPrice;
+        }
+        // La final orașul
+        else if (newFilters.city) {
+          removedFilters.push(`orașul ${newFilters.city}`);
+          delete newFilters.city;
+        }
+
+        if (removedFilters.length > 0) {
+          reply = `Am eliminat filtrul pentru ${removedFilters.join(
+            ", "
+          )}. Iată mai multe opțiuni! ✨`;
+        }
+        newState.filters = newFilters;
+      }
+      newState.conversationStep = "showing_results";
+      break;
+
+    case "show_all":
+      const category = state.filters?.category || "produse";
+      reply = `Bine! Îți arăt toate ${category}le disponibile de la producătorii locali! 🛍️`;
+      action = "clear_filters";
+      // Păstrăm doar categoria, eliminăm restul
+      if (state.filters) {
+        newState.filters = {
+          category: state.filters.category,
+          smallBusinessOnly: state.filters.smallBusinessOnly,
+        };
+      }
+      newState.conversationStep = "showing_results";
+      break;
+
+    case "refine":
+      reply =
+        "Perfect! 🎯 Spune-mi ce preferi și te ajut să găsești exact ce cauți!\n\nPoți menționa:\n• Culoarea (ex: roșu, albastru, verde)\n• Bugetul (ex: până în 100 lei)\n• Mărimea (ex: M, L, XL)\n• Orașul (ex: Cluj, București)";
+      action = "ask_details";
+      newState.conversationStep = "refining";
+      newState.hasAskedDetails = true;
+      break;
+
+    case "search_new":
+      reply =
+        "Sigur! 🔄 Ce anume vrei să cauți?\n\nÎmi poți spune ce tip de produs cauți (ex: tricou, geantă, lumânări, bijuterii, etc.)";
+      action = "reset";
+      newState.filters = { smallBusinessOnly: true };
+      newState.conversationStep = "initial";
+      break;
+
+    default:
+      reply =
+        "Nu am înțeles răspunsul. 🤔 Poți să-mi spui ce anume cauți sau să folosești butoanele de mai sus?";
+      action = "continue";
+      break;
+  }
+
+  return {
+    reply,
+    action,
+    newState,
+  };
+}
+
 module.exports = {
   processMessage,
+  generateFeedback,
+  processFeedbackResponse,
 };
